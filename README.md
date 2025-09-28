@@ -91,6 +91,3 @@ The final executable will be in the `dist/` folder.
 
 Contributions are welcome! Open an **issue** or submit a **pull request** with improvements.
 
-## 📜 License
-
-Distributed under the MIT License. See `LICENSE` for details.
