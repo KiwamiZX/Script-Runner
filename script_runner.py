@@ -2,7 +2,7 @@ import sys, os, subprocess, re, datetime, json
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QLabel, QTextEdit, QFileDialog, QComboBox, QLineEdit, QListWidget,
-    QSplitter, QTabWidget
+    QSplitter, QTabWidget, QDialog, QVBoxLayout, QDialogButtonBox, QCheckBox
 )
 from PySide6.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QFont, QIcon, QDesktopServices
 from PySide6.QtCore import Qt, QThread, Signal, QUrl
@@ -16,7 +16,7 @@ LOG_DIR = os.path.join(APP_DIR, "logs")
 os.makedirs(APP_DIR, exist_ok=True)
 os.makedirs(LOG_DIR, exist_ok=True)
 
-DEFAULT_CONFIG = {"theme": "dark", "history": []}
+DEFAULT_CONFIG = {"theme": "dark", "history": [], "external_console": False, "auto_run": False}
 
 def load_config():
     if os.path.exists(CONFIG_PATH):
@@ -35,7 +35,6 @@ def save_config(cfg):
         pass
 
 def resource_path(relative_path):
-    """Resolve path for dev and PyInstaller bundle"""
     if hasattr(sys, "_MEIPASS"):
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.join(os.path.abspath("."), relative_path)
@@ -100,6 +99,42 @@ class ScriptWorker(QThread):
         self._stop_requested = True
 
 # ---------------------------
+# Settings Dialog
+# ---------------------------
+class SettingsDialog(QDialog):
+    def __init__(self, config, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Settings")
+        self.setModal(True)
+        self.config = config
+
+        layout = QVBoxLayout(self)
+
+        self.theme_checkbox = QCheckBox("Use dark theme")
+        self.theme_checkbox.setChecked(config.get("theme", "dark") == "dark")
+        layout.addWidget(self.theme_checkbox)
+
+        self.console_checkbox = QCheckBox("Run in external console")
+        self.console_checkbox.setChecked(config.get("external_console", False))
+        layout.addWidget(self.console_checkbox)
+
+        self.autorun_checkbox = QCheckBox("Automatically run script at startup (if opened with one)")
+        self.autorun_checkbox.setChecked(config.get("auto_run", False))
+        layout.addWidget(self.autorun_checkbox)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def get_settings(self):
+        return {
+            "theme": "dark" if self.theme_checkbox.isChecked() else "light",
+            "external_console": self.console_checkbox.isChecked(),
+            "auto_run": self.autorun_checkbox.isChecked()
+        }
+
+# ---------------------------
 # Main App
 # ---------------------------
 class ScriptRunner(QWidget):
@@ -119,9 +154,11 @@ class ScriptRunner(QWidget):
         self.refresh_logs_list()
         self.refresh_history_list()
 
-    # ---------------------------
-    # UI Setup
-    # ---------------------------
+        # Auto-run only if app was opened with a script
+        if self.config.get("auto_run", False) and len(sys.argv) > 1:
+            self.load_script(sys.argv[1])
+            self.run_script()
+
     def setup_ui(self):
         main = QHBoxLayout()
         self.setLayout(main)
@@ -139,21 +176,7 @@ class ScriptRunner(QWidget):
         self.sidebar.addTab(self.history_list, "History")
         self.sidebar.addTab(self.logs_list, "Logs")
 
-        sidebar_widget = QWidget()
-        sidebar_layout = QVBoxLayout()
-        sidebar_widget.setLayout(sidebar_layout)
-        sidebar_layout.addWidget(self.sidebar)
-
-        btn_row = QHBoxLayout()
-        refresh_btn = QPushButton("Refresh Logs")
-        refresh_btn.clicked.connect(self.refresh_logs_list)
-        open_dir_btn = QPushButton("Open Logs Folder")
-        open_dir_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(LOG_DIR)))
-        btn_row.addWidget(refresh_btn)
-        btn_row.addWidget(open_dir_btn)
-        sidebar_layout.addLayout(btn_row)
-
-        splitter.addWidget(sidebar_widget)
+        splitter.addWidget(self.sidebar)
 
         # Main content
         content = QWidget()
@@ -183,9 +206,10 @@ class ScriptRunner(QWidget):
         self.stop_btn.clicked.connect(self.stop_script)
         top.addWidget(self.stop_btn)
 
-        self.theme_btn = QPushButton("Theme: Dark" if self.theme == "dark" else "Theme: Light")
-        self.theme_btn.clicked.connect(self.toggle_theme)
-        top.addWidget(self.theme_btn)
+        # Settings button
+        settings_btn = QPushButton("⚙️ Settings")
+        settings_btn.clicked.connect(self.open_settings)
+        top.addWidget(settings_btn)
 
         content_layout.addLayout(top)
 
@@ -223,41 +247,33 @@ class ScriptRunner(QWidget):
                 QPushButton:hover { background-color: #3c3c3c; }
                 QLineEdit, QTextEdit { background-color: #2a2a2a; border: 1px solid #444; color: #e0e0e0; border-radius: 6px; }
                 QComboBox { background-color: #2a2a2a; border: 1px solid #444; color: #e0e0e0; border-radius: 6px; }
-
-                /* Força fundo escuro nas listas */
-                QListWidget, QTabWidget::pane {
-                    background-color: #2a2a2a;
-                    border: 1px solid #444;
-                    color: #e0e0e0;
-                }
-                QTabBar::tab {
-                    background: #2a2a2a;
-                    padding: 6px 10px;
-                    border: 1px solid #444;
-                    border-bottom: none;
-                    border-top-left-radius: 6px;
-                    border-top-right-radius: 6px;
-                }
+                QListWidget, QTabWidget::pane { background-color: #2a2a2a; border: 1px solid #444; color: #e0e0e0; }
+                QTabBar::tab { background: #2a2a2a; padding: 6px 10px; border: 1px solid #444; border-bottom: none; border-top-left-radius: 6px; border-top-right-radius: 6px; }
                 QTabBar::tab:selected { background: #3a3a3a; }
             """
-
-        else:  # light theme
+        else:
             stylesheet = """
                 QWidget { background-color: #f4f4f4; color: #202020; font-family: Segoe UI; font-size: 14px; }
                 QPushButton { background-color: #ffffff; border: 1px solid #ccc; padding: 6px; border-radius: 6px; }
                 QPushButton:hover { background-color: #f0f0f0; }
                 QLineEdit, QTextEdit { background-color: #ffffff; border: 1px solid #ccc; color: #202020; border-radius: 6px; }
                 QComboBox { background-color: #ffffff; border: 1px solid #ccc; color: #202020; border-radius: 6px; }
-                QListWidget { background-color: #ffffff; border: 1px solid #ccc; color: #202020; }
+                QListWidget, QTabWidget::pane { background-color: #ffffff; border: 1px solid #ccc; color: #202020; }
+                QTabBar::tab { background: #e0e0e0; padding: 6px 10px; border: 1px solid #ccc; border-bottom: none; border-top-left-radius: 6px; border-top-right-radius: 6px; }
+                QTabBar::tab:selected { background: #ffffff; }
             """
         self.setStyleSheet(stylesheet)
-        self.theme_btn.setText("Theme: Dark" if theme == "dark" else "Theme: Light")
 
-    def toggle_theme(self):
-        self.theme = "light" if self.theme == "dark" else "dark"
-        self.apply_theme(self.theme)
-        self.config["theme"] = self.theme
-        save_config(self.config)
+    # ---------------------------
+    # Settings dialog
+    # ---------------------------
+    def open_settings(self):
+        dlg = SettingsDialog(self.config, self)
+        if dlg.exec():
+            new_settings = dlg.get_settings()
+            self.config.update(new_settings)
+            save_config(self.config)
+            self.apply_theme(self.config["theme"])
 
     # ---------------------------
     # Script loading
@@ -288,7 +304,6 @@ class ScriptRunner(QWidget):
         elif ext == ".ps1":
             self.type_box.setCurrentText("PowerShell")
 
-        # Atualiza histórico
         hist = self.config.get("history", [])
         if path in hist:
             hist.remove(path)
@@ -298,7 +313,7 @@ class ScriptRunner(QWidget):
         self.refresh_history_list()
 
     # ---------------------------
-    # Execução de scripts
+    # Execution
     # ---------------------------
     def run_script(self):
         if not self.script_path:
@@ -316,6 +331,14 @@ class ScriptRunner(QWidget):
             cmd = ["powershell", "-ExecutionPolicy", "Bypass", "-File", self.script_path] + args
         else:
             self.output_box.append("Unsupported script type.")
+            return
+
+        if self.config.get("external_console", False):
+            try:
+                subprocess.Popen(cmd, creationflags=subprocess.CREATE_NEW_CONSOLE)
+                self.output_box.append("> Script launched in external console.")
+            except Exception as e:
+                self.output_box.append(f"> Failed to launch in external console: {e}")
             return
 
         self.output_box.clear()
@@ -339,7 +362,7 @@ class ScriptRunner(QWidget):
         self.stop_btn.setEnabled(False)
 
     # ---------------------------
-    # Logs e histórico
+    # Logs & History
     # ---------------------------
     def save_log(self):
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -393,9 +416,10 @@ if __name__ == "__main__":
     window = ScriptRunner()
     window.resize(1050, 600)
 
-    # Suporte a "Abrir com"
-    if len(sys.argv) > 1:
+    # If launched with a script and auto_run is enabled, run it
+    if window.config.get("auto_run", False) and len(sys.argv) > 1:
         window.load_script(sys.argv[1])
+        window.run_script()
 
     window.show()
     sys.exit(app.exec())
