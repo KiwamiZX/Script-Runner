@@ -132,6 +132,7 @@ class ScriptRunnerWindow(QWidget):
         ]
 
         self.script_path: Optional[str] = None
+        self.local_python: Optional[str] = None
         self.process = ScriptProcess(self)
         self.process.output_ready.connect(partial(self._append_output, stamp=False))
         self.process.error.connect(self._handle_process_error)
@@ -449,6 +450,7 @@ class ScriptRunnerWindow(QWidget):
             index = self.interpreter_box.findText(interpreter)
             if index >= 0:
                 self.interpreter_box.setCurrentIndex(index)
+        self.local_python = self._locate_local_python(path)
         self._remember_history(path)
 
     def _detect_interpreter(self, path: str) -> Optional[str]:
@@ -514,8 +516,10 @@ class ScriptRunnerWindow(QWidget):
         profile = next((p for p in self.profiles if p.name == self.profile_box.currentText()), None)
         if profile and profile.command:
             return profile.command, list(profile.arguments)
+        if name == "Python" and self.local_python:
+            return self.local_python, []
         default_map = {
-            "Python": (os.environ.get("SCRIPT_RUNNER_PYTHON", "") or self._python_exec(), []),
+            "Python": (self._python_exec(), []),
             "Bash": ("bash", []),
             "PowerShell": ("powershell", ["-ExecutionPolicy", "Bypass", "-File"]),
             "Node.js": ("node", []),
@@ -523,7 +527,46 @@ class ScriptRunnerWindow(QWidget):
         return default_map.get(name, ("python", []))
 
     def _python_exec(self) -> str:
-        return sys.executable or "python"
+        env_override = os.environ.get("SCRIPT_RUNNER_PYTHON")
+        if env_override:
+            return env_override
+
+        config_default = self.config.get("fallback_python")
+        if config_default:
+            return config_default
+
+        base_exec = getattr(sys, "_base_executable", "")
+        if base_exec and os.path.isfile(base_exec):
+            return base_exec
+
+        executable = sys.executable or ""
+        base = os.path.basename(executable).lower()
+        if base.startswith("python"):
+            return executable
+
+        # When packaged, fall back to system python on PATH.
+        return "python"
+
+    def _locate_local_python(self, script_path: str) -> Optional[str]:
+        if not script_path:
+            return None
+        directory = os.path.abspath(os.path.dirname(script_path))
+        candidates = [".venv", "venv", "env"]
+        while True:
+            for name in candidates:
+                candidate_dir = os.path.join(directory, name)
+                if os.path.isdir(candidate_dir):
+                    if sys.platform.startswith("win"):
+                        python_path = os.path.join(candidate_dir, "Scripts", "python.exe")
+                    else:
+                        python_path = os.path.join(candidate_dir, "bin", "python")
+                    if os.path.isfile(python_path):
+                        return python_path
+            new_directory = os.path.dirname(directory)
+            if new_directory == directory:
+                break
+            directory = new_directory
+        return None
 
     def _launch_external(self, program: str, arguments: List[str]) -> None:
         try:

@@ -3,12 +3,15 @@ from __future__ import annotations
 import sys
 
 from PySide6.QtWidgets import QApplication
+from PySide6.QtGui import QIcon
 
 from .ui.main_window import ScriptRunnerWindow
+from .paths import resource_path
 
 
 def run(argv: list[str]) -> int:
     app = QApplication(argv)
+    app.setWindowIcon(QIcon(resource_path("app_icon.ico")))
     window = ScriptRunnerWindow()
     window.resize(1100, 680)
 

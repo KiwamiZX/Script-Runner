@@ -13,6 +13,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "argument_suggestions": [],
     "interpreter_profiles": [],
     "active_profile": None,
+    "fallback_python": "",
 }
 
 

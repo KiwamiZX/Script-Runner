@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
     QPushButton,
     QHBoxLayout,
+    QFileDialog,
 )
 
 
@@ -77,6 +78,15 @@ class SettingsDialog(QDialog):
         form.addRow("Command", self.profile_command)
         form.addRow("Default arguments", self.profile_args)
         layout.addLayout(form)
+
+        python_row = QHBoxLayout()
+        self.python_path_edit = QLineEdit(config.get("fallback_python", ""))
+        self.python_path_edit.setPlaceholderText("Path to python.exe (optional)")
+        python_row.addWidget(self.python_path_edit)
+        browse_python = QPushButton("Browse")
+        browse_python.clicked.connect(self._browse_python)
+        python_row.addWidget(browse_python)
+        layout.addLayout(python_row)
 
         self.profile_list = QListWidget()
         layout.addWidget(self.profile_list)
@@ -178,6 +188,12 @@ class SettingsDialog(QDialog):
             "external_console": self.console_checkbox.isChecked(),
             "auto_run": self.autorun_checkbox.isChecked(),
             "interpreter_profiles": [profile.to_dict() for profile in self._profiles],
+            "fallback_python": self.python_path_edit.text().strip(),
         }
         tasks = {"clear_history": self._clear_history, "clear_logs": self._clear_logs}
         return data, tasks
+
+    def _browse_python(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Select Python executable", "", "Python Executable (python*.exe);;All Files (*)")
+        if path:
+            self.python_path_edit.setText(path)
