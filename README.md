@@ -20,9 +20,11 @@ Perfect for developers and sysadmins who want a friendlier alternative to the co
 ## 📸 Screenshots
 
 
-<img width="1315" height="789" alt="image" src="https://github.com/user-attachments/assets/7d1fb2de-8a78-4621-b364-6c9b70b9d5de" />
+<img width="1372" height="908" alt="image" src="https://github.com/user-attachments/assets/4b7928ce-70dc-474e-81f2-27bc070adb81" />
 
-<img width="1315" height="789" alt="image" src="https://github.com/user-attachments/assets/443e73b9-112a-49e7-a692-9ec25968afc4" />
+
+<img width="1372" height="909" alt="image" src="https://github.com/user-attachments/assets/6a361a8d-c2fb-45d6-9b56-992f07d2d645" />
+
 
 ---
 
