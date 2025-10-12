@@ -98,7 +98,7 @@ Development Notes
 License
 -------
 
-This project is provided under the MIT License. See [LICENSE](LICENSE) if present, or add your preferred license file before publishing.
+This project is provided under the MIT License. See [LICENSE](LICENSE) 
 
 ---
 
